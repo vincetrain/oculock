@@ -1,2 +1,0 @@
-import face_detect
-
