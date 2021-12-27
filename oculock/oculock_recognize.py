@@ -1,5 +1,6 @@
 # imports
 import cv2
+import os
 
 def readCam(cam):
     ret, frame = cam.read() # reads webcam
@@ -15,8 +16,8 @@ def readCam(cam):
 
 def getEye(cam, eyeCascade):
     # gets dimensions of webcam, used for calculating minimum size later
-    cam_width = cam.get(cv2.CAP_PROP_FRAME_WIDTH)
-    cam_height = cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+    cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     # loops infinitely while displaying frames of current webcam
     while readCam(cam) is not None:
@@ -24,12 +25,11 @@ def getEye(cam, eyeCascade):
         
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # grayscales image for easier eye-dentification
         
-        # detects any eyes within frame using provided cascade
         eyes = eyeCascade.detectMultiScale (
             gray,
             scaleFactor = 1.1,  
-            minNeighbors = 40,  
-            minSize = (int(cam_width/8), int(cam_height/8)),
+            minNeighbors = 80,  
+            minSize = (cam_width//6, cam_height//6),
             flags = cv2.CASCADE_SCALE_IMAGE
         )
         
@@ -39,68 +39,66 @@ def getEye(cam, eyeCascade):
                 cropped_eye = frame[y:y+h, x:x+w]
             return cropped_eye
         return None
-  
-def getSamples(cam, eyeCascade, sample_size=75):
-    count = 0
-    
-    frame = getEye(cam, eyeCascade)
-    
-    # captures 75 sample images of eye
-    while True:
-        
-        if frame is not None:
-            count += 1
 
-            # grayscales eye and resizes for consistency 
-            dataSetEye = cv2.resize(frame, (224, 224))
-            dataSetEye = cv2.cvtColor(dataSetEye, cv2.COLOR_BGR2GRAY)
-            
-            # saves training images into a specified directory with unique names
-            training_dir = 'src/train/images/' + str(count) + '.jpg'
-            cv2.imwrite(training_dir, dataSetEye)
-            print("saved to ", training_dir)
-
-        if cv2.waitKey(1) == 27 or count == sample_size:
-            break
+def captureSamples(max_samples):
+    pass
 
 if __name__ == "__main__":
     cam = cv2.VideoCapture(0) # sets up camera
 
-    cam_width = cam.get(cv2.CAP_PROP_FRAME_WIDTH)
-    cam_height = cam.get(cv2.CAP_PROP_FRAME_HEIGHT)
+    cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+    cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
 
     cascPath = "haarcascade_eye.xml"    # dir to cascade file, DO NOT CHANGE UNLESS NEEDED
     eyeCascade = cv2.CascadeClassifier(cascPath)    # link to cascade file
-
+    
+    max_samples = 75 # max sample size
+    count = 0 # counter variable for samples
+    training_dir = "train/" # directory of where training images should go
+    
+    # creates a new directory 
+    if not os.path.exists(training_dir):
+        os.mkdir(training_dir)
+    
     # detects and highlights eyes
     cv2.namedWindow("Oculock | Cropped Eye")
     while readCam(cam) is not None:
-        cropped_eye = getEye(cam, eyeCascade)
-        frame = readCam(cam)
-        frame = cv2.resize(frame, (int(cam_width*.75), int(cam_height*.75)))
+        raw = readCam(cam)
+        frame = cv2.resize(raw, (int(cam_width*.75), int(cam_height*.75)))
         
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # grayscales image for easier eye-dentification
         
-        # detects any eyes within frame using provided cascade
+        cropped_eye = getEye(cam, eyeCascade)
+        
         eyes = eyeCascade.detectMultiScale (
             gray,
             scaleFactor = 1.1,  
             minNeighbors = 80,  
-            minSize = (30, 30),
+            minSize = (cam_width//8, cam_height//8),
             flags = cv2.CASCADE_SCALE_IMAGE
         )
         
-        # draws a rectangle around detected eyes
         for (x, y, w, h) in eyes:
-            cv2.rectangle(frame, (x, y), (x + w, y + h), (0, 255, 0), 2)
+             cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
         
         # creates a new window containing frame
         cv2.imshow("Oculock | Raw Camera", frame)
         
         if (cropped_eye is not None):
+            if (count < max_samples):
+                count += 1
+                # grayscales eye and resizes for consistency 
+                dataSetEye = cv2.resize(cropped_eye, (224, 224))
+                dataSetEye = cv2.cvtColor(dataSetEye, cv2.COLOR_BGR2GRAY)
+                
+                # saves training images into a specified directory with unique names
+                cv2.imwrite((training_dir +  str(count) + ".jpg"), dataSetEye)
+                cv2.putText(cropped_eye, str(count), (50,50), cv2.FONT_HERSHEY_TRIPLEX, 1, (0,255,0),2)
+            else:
+                cv2.putText(cropped_eye, "capture complete", (50,50), cv2.FONT_HERSHEY_TRIPLEX, 1, (0,255,0),2)
+                
             cv2.imshow("Oculock | Cropped Eye", cropped_eye)
             
-        
         key = cv2.waitKey(1)
         
         # closes window if ESCAPE key is pressed
