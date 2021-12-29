@@ -48,9 +48,9 @@ def makeDataset(dataset_size):
     
     count = 0
     # collects images of eyes to train later
-    while ocutil.getEye(cam) is not None:
+    while getEye(cam) is not None:
         count+=1
-        frame = ocutil.getEye(cam) # gets current frame containing an eye
+        frame = getEye(cam) # gets current frame containing an eye
         # grayscales eye and resizes for consistency 
         dataset_eye = cv2.resize(frame, (224, 224))
         dataset_eye = cv2.cvtColor(dataset_eye, cv2.COLOR_BGR2GRAY)
