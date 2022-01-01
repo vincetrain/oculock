@@ -1,13 +1,21 @@
 # imports
-import cv2
-import os
-
+from __future__ import print_function
+from keras import backend as K
 from keras.layers import Dense, Flatten, Dropout
+from keras.layers import Conv2D, MaxPooling2D
+from keras.datasets import mnist
 from keras.models import Model
+from keras.models import Sequential
 from keras.applications.vgg16 import VGG16
 from keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.optimizers import RMSprop
 from glob import glob
+
+import keras
+import cv2
+import os
+
+
 
 cascadePath = "./haarcascade_eye.xml"
 eyeCascade = cv2.CascadeClassifier(cascadePath)
@@ -38,11 +46,11 @@ def getEye(cam, frame):
     # returns cropped frame of eye for use
     if (len(eyes) > 0):
         for (x, y, w, h) in eyes:
-            cropped_eye = frame[y:y+h, x:x+w]
+            cropped_eye = gray[y:y+h, x:x+w]
         return cropped_eye
 
 def makeDataset():
-    cam = cv2.VideoCapture(0)
+    cam = cv2.VideoCapture(1)
     dataset_size = 150
     
     training_dir = "./train/images/" # directory containing images to be trained
@@ -90,65 +98,86 @@ def makeDataset():
     cv2.destroyAllWindows()
         
 def makeModel(name):
+
     # creates a models path if not already exists
     if not os.path.exists("./models"):
         os.mkdir("./models")
 
-    # constant containing our image size: used to resize images later
-    IMAGE_SIZE = [224, 224]
-  
-    # adds preprocessing layer to front of VGG
-    vgg = VGG16(input_shape=IMAGE_SIZE + [3], weights='imagenet', include_top=False)
-    # tells program to not train existing weights
-    for layer in vgg.layers:
-        layer.trainable = False
-    # gets classes in both train and test folders
-    train_folders = glob('./train/images/*')
-    
-    # our layers
-    x = Flatten()(vgg.output)
-    x = Dense(1000, activation='relu')(x)
-    x = Dropout (0.5)(x)
-    x = Dense(1000, activation='relu')(x)
-    
-    prediction = Dense(len(train_folders), activation='sigmoid') (x)
-    
-    # create a model object
-    model = Model(inputs=vgg.input, outputs=prediction)
-    # view the structure of the model
-    print(model.summary())
-    # tell the model what cost and optimization method to use
-    model.compile(
-        loss='categorical_crossentropy',
-        optimizer=RMSprop(learning_rate = 0.0001),
-        metrics=['accuracy']
-    )
-    
-    train_datagen = ImageDataGenerator(rescale = 1./255,
-                                        shear_range = 0.2,
-                                        zoom_range = 0.2,
-                                        horizontal_flip = True) 
-    test_datagen = ImageDataGenerator(rescale = 1./255)
-    
-    training_set = train_datagen.flow_from_directory('./train/',
-                                                  target_size = (224, 224),
-                                                  batch_size = 32,
-                                                  class_mode = 'categorical')
-    test_set = test_datagen.flow_from_directory('./test/',
-                                                target_size = (224, 224),
-                                                batch_size = 32,
-                                                class_mode = 'categorical') 
-    
-    nb_train_samples = 100
-    nb_validation_samples = 50
-    batch_size = 32
-    # fit the model
-    r = model.fit(
-        training_set,
-        validation_data=test_set,
-        epochs=5,
-        steps_per_epoch= nb_train_samples // batch_size,
-        validation_steps = nb_validation_samples // batch_size)
+    #mini batch gradient descent ftw
+    batch_size = 20
+    #10 difference characters
+    num_classes = 10
+    #very short training time
+    epochs = 5
+
+    # input image dimensions
+    #28x28 pixel images. 
+    img_rows = 224
+    img_cols = 224
+
+    # the data downloaded, shuffled and split between train and test sets
+    #if only all datasets were this easy to import and format
+    (x_train, y_train), (x_test, y_test) = mnist.load_data()
+
+    print(x_train.shape)  
+    print(x_train.size)     
+    print(len(x_train))   
+
+    if K.image_data_format() == 'channels_first':
+        x_train = x_train.reshape(x_train.shape[0], 1, img_rows, img_cols)
+        x_test = x_test.reshape(x_test.shape[0], 1, img_rows, img_cols)
+        input_shape = (1, img_rows, img_cols)
+    else:
+        x_train = x_train.reshape(x_train.shape[0], img_rows, img_cols, 1)
+        x_test = x_test.reshape(x_test.shape[0], img_rows, img_cols, 1)
+        input_shape = (img_rows, img_cols, 1)
+
+    #more reshaping
+    x_train = x_train.astype('float32')
+    x_test = x_test.astype('float32')
+    x_train /= 255
+    x_test /= 255
+    print('x_train shape:', x_train.shape)
+    print(x_train.shape[0], 'train samples')
+    print(x_test.shape[0], 'test samples')
+
+    # convert class vectors to binary class matrices
+    from keras.utils.np_utils import to_categorical
+    y_train = keras.utils.np_utils.to_categorical(y_train, num_classes)
+    y_test = keras.utils.np_utils.to_categorical(y_test, num_classes)
+
+    #build our model
+    model = Sequential()
+    #convolutional layer with rectified linear unit activation
+    model.add(Conv2D(32, kernel_size=(3, 3),
+                    activation='relu',
+                    input_shape=input_shape))
+    #again
+    model.add(Conv2D(64, (3, 3), activation='relu'))
+    #choose the best features via pooling
+    model.add(MaxPooling2D(pool_size=(2, 2)))
+    #randomly turn neurons on and off to improve convergence
+    model.add(Dropout(0.25))
+    #flatten since too many dimensions, we only want a classification output
+    model.add(Flatten())
+    #fully connected to get all relevant data
+    model.add(Dense(128, activation='relu'))
+    #one more dropout for convergence' sake :) 
+    model.add(Dropout(0.5))
+    #output a softmax to squash the matrix into output probabilities
+    model.add(Dense(num_classes, activation='softmax'))
+    #Adaptive learning rate (adaDelta) is a popular form of gradient descent rivaled only by adam and adagrad
+    #categorical ce since we have multiple classes (10) 
+    model.compile(loss=keras.losses.categorical_crossentropy,
+                optimizer=RMSprop(learning_rate = 0.001),
+                metrics=['accuracy'])
+
+    #train that ish!
+    r = model.fit(x_train, y_train,
+            batch_size=batch_size,
+            epochs=epochs,
+            verbose=1,
+            validation_data=(x_test, y_test))
         
     import matplotlib.pyplot as plt
     plt.style.use('ggplot')
