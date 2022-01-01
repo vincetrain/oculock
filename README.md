@@ -4,7 +4,8 @@ Oculock is a package made to help developers quickly secure their applications w
 
 ### dependencies
 
-> opencv-python
-> tensorflow
-> numpy
-> pillow
+> opencv-python  
+> tensorflow  
+> numpy  
+> pillow  
+> scipy
