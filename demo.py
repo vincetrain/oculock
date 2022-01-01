@@ -8,11 +8,22 @@ from PIL import Image
 from glob import glob
 from keras.models import load_model
 
-eyeCascade = cv2.CascadeClassifier("./haarcascade_righteye_2splits.xml")
+eyeCascade = cv2.CascadeClassifier("./haarcascade_eye.xml")
 
-def eye_extract(frame):
+def eye_extract(cam, frame):
+    cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
+    cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
     # detects all right eyes within frame using eyeCascade
-    eyes = eyeCascade.detectMultiScale(frame, 1.3, 5)
+    
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    
+    eyes = eyeCascade.detectMultiScale (
+        gray,
+        scaleFactor = 1.1,  
+        minNeighbors = 30,  
+        minSize = (30, 30),
+        flags = cv2.CASCADE_SCALE_IMAGE
+    )
     
     # returns none if eyes not found
     if eyes == ():
@@ -24,6 +35,8 @@ def eye_extract(frame):
         cropped_eye = frame[y:y+h, x:x+w]
     
     return cropped_eye
+
+
 
 def trainModel():
     name = str(input("Enter name for model: "))
@@ -56,11 +69,12 @@ def eye_recog():
     while True:
         _, frame = cam.read()
         
-        eye = eye_extract(frame)
+        eye = eye_extract(cam, frame)
         
         if type(eye) is np.ndarray:
             eye = cv2.resize(eye, (224, 224))
             img = Image.fromarray(eye, "RGB")
+            
             
             img_array = np.array(img)
             

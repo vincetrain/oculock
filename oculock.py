@@ -9,42 +9,41 @@ from keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.optimizers import RMSprop
 from glob import glob
 
-cascadePath = "./haarcascade_righteye_2splits.xml"
+cascadePath = "./haarcascade_eye.xml"
 eyeCascade = cv2.CascadeClassifier(cascadePath)
 
-def getEye(cam):
+# creates directories for storing the train and test images
+if not os.path.exists("./train"):
+    os.mkdir("./train")
+if not os.path.exists("./test"):
+    os.mkdir("./test")
+
+def getEye(cam, frame):
     # gets dimensions of webcam, used for calculating minimum size later
     cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
     cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # grayscales image for easier eye-dentification
+    
+    eyes = eyeCascade.detectMultiScale(gray, 1.3, 5)
+    
+    # eyes = eyeCascade.detectMultiScale (
+    #     gray,
+    #     scaleFactor = 1.1,  
+    #     minNeighbors = 30,  
+    #     minSize = (cam_width//7, cam_height//7),
+    #     flags = cv2.CASCADE_SCALE_IMAGE
+    # )
+    
+    # returns cropped frame of eye for use
+    if (len(eyes) > 0):
+        for (x, y, w, h) in eyes:
+            cropped_eye = frame[y:y+h, x:x+w]
+        return cropped_eye
 
-    # loops and checks frames for eye until eye is found
-    while True:
-        ret, frame = cam.read() # reads webcam
-        
-        # breaks loop if frame not found
-        if not ret:
-            print("failed grabbing frame")
-            break
-        
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # grayscales image for easier eye-dentification
-        
-        eyes = eyeCascade.detectMultiScale (
-            gray,
-            scaleFactor = 1.1,  
-            minNeighbors = 60,  
-            minSize = (cam_width//7, cam_height//7),
-            flags = cv2.CASCADE_SCALE_IMAGE
-        )
-        
-        # returns cropped frame of eye for use
-        if (len(eyes) > 0):
-            for (x, y, w, h) in eyes:
-                cropped_eye = frame[y:y+h, x:x+w]
-            return cropped_eye
-    return None # returns none if camera dont work
-
-def makeDataset(dataset_size = 175):
+def makeDataset():
     cam = cv2.VideoCapture(0)
+    dataset_size = 150
     
     training_dir = "./train/images/" # directory containing images to be trained
     test_dir = "./test/images/" # directory containing images to be trained
@@ -61,27 +60,32 @@ def makeDataset(dataset_size = 175):
     count = 0
     # collects images of eyes to train later
     
-    while getEye(cam) is not None:
-        count+=1
-        frame = getEye(cam) # gets current frame containing an eye
-        # grayscales eye and resizes for consistency 
-        dataset_eye = cv2.resize(frame, (224, 224))
-        dataset_eye = cv2.cvtColor(dataset_eye, cv2.COLOR_BGR2GRAY)
-        # writes image of eye into specified directory
-        if count < dataset_size//3:
-            c_dir = test_dir
-        else:
+    while True:
+        ret, frame = cam.read()
+        if not ret:
+            print("unable to get frame")
+            break
+        if getEye(cam, frame) is not None:
+            count+=1
+            eye = getEye(cam, frame) # gets current frame containing an eye
+            # grayscales eye and resizes for consistency 
+            dataset_eye = cv2.resize(eye, (224, 224))
+            dataset_eye = cv2.cvtColor(dataset_eye, cv2.COLOR_BGR2GRAY)
+            # writes image of eye into specified directory
             c_dir = training_dir
-        cv2.imwrite((c_dir +  str(count) + ".jpg"), dataset_eye)
-        
-        print("saved image", count, "into", training_dir)
-        
-        # displays current cropped eye in window
-        cv2.putText(dataset_eye, str(count), (50, 50), cv2.FONT_HERSHEY_TRIPLEX, 1, (0,255,0), 2)
-        cv2.imshow("Cropped Eye", dataset_eye)
+            if count <= 50:
+                c_dir = test_dir       
+            cv2.imwrite((c_dir +  str(count) + ".jpg"), dataset_eye)
+            
+            print("saved image", count, "into", training_dir)
+            
+            # displays current cropped eye in window
+            cv2.putText(dataset_eye, str(count), (50, 50), cv2.FONT_HERSHEY_TRIPLEX, 1, (0,255,0), 2)
+            cv2.imshow("Cropped Eye", dataset_eye)
         key = cv2.waitKey(1)
         if key == 27 or count >= dataset_size:
             break
+        
     cam.release()
     cv2.destroyAllWindows()
         
@@ -100,15 +104,14 @@ def makeModel(name):
         layer.trainable = False
     # gets classes in both train and test folders
     train_folders = glob('./train/images/*')
-    print(len(train_folders))
-    test_folders = glob('./test/images/*') 
+    
     # our layers
     x = Flatten()(vgg.output)
     x = Dense(1000, activation='relu')(x)
     x = Dropout (0.5)(x)
     x = Dense(1000, activation='relu')(x)
     
-    prediction = Dense(len(train_folders), activation='softmax') (x)
+    prediction = Dense(len(train_folders), activation='sigmoid') (x)
     
     # create a model object
     model = Model(inputs=vgg.input, outputs=prediction)
@@ -117,7 +120,7 @@ def makeModel(name):
     # tell the model what cost and optimization method to use
     model.compile(
         loss='categorical_crossentropy',
-        optimizer=RMSprop(learning_rate = 0.001),
+        optimizer=RMSprop(learning_rate = 0.0001),
         metrics=['accuracy']
     )
     
@@ -136,15 +139,25 @@ def makeModel(name):
                                                 batch_size = 32,
                                                 class_mode = 'categorical') 
     
-    nb_train_samples = len(train_folders)
-    nb_validation_samples = len(test_folders)
-    batch_size = 16
+    nb_train_samples = 100
+    nb_validation_samples = 50
+    batch_size = 32
     # fit the model
-    r = model.fit(    
+    r = model.fit(
         training_set,
         validation_data=test_set,
         epochs=5,
-        steps_per_epoch=nb_train_samples // batch_size,
+        steps_per_epoch= nb_train_samples // batch_size,
         validation_steps = nb_validation_samples // batch_size)
+        
+    import matplotlib.pyplot as plt
+    plt.style.use('ggplot')
+    plt.plot(r.history['loss'], label = 'loss')
+    plt.plot(r.history['val_loss'], label='val loss')
+    plt.title("Loss vs Val_Loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.show()
     
     model.save("./models/" + name + "_eye_new_model.h5")
