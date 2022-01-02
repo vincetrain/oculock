@@ -26,9 +26,9 @@ def getEye(cam, frame):
     cam_width = int(cam.get(cv2.CAP_PROP_FRAME_WIDTH))
     cam_height = int(cam.get(cv2.CAP_PROP_FRAME_HEIGHT))
     
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # grayscales image for easier eye-dentification
+    # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)  # grayscales image for easier eye-dentification
     
-    eyes = eyeCascade.detectMultiScale(gray, 1.3, 5)
+    eyes = eyeCascade.detectMultiScale(frame, 1.3, 5)
     
     # eyes = eyeCascade.detectMultiScale (
     #     gray,
@@ -73,7 +73,7 @@ def makeDataset():
             eye = getEye(cam, frame) # gets current frame containing an eye
             # grayscales eye and resizes for consistency 
             dataset_eye = cv2.resize(eye, (224, 224))
-            dataset_eye = cv2.cvtColor(dataset_eye, cv2.COLOR_BGR2GRAY)
+            # dataset_eye = cv2.cvtColor(dataset_eye, cv2.COLOR_BGR2GRAY)
             # writes image of eye into specified directory
             c_dir = training_dir
             if count <= 50:
@@ -93,7 +93,7 @@ def makeDataset():
     cv2.destroyAllWindows()
         
 def makeModel(name):
-  # re-size all the images to this
+    # re-size all the images to this
     IMAGE_SIZE = [224, 224] 
     vgg = VGG16(input_shape=IMAGE_SIZE + [3], weights='imagenet', include_top=False)
     # don't train existing weights
@@ -128,19 +128,21 @@ def makeModel(name):
     
     training_set = train_datagen.flow_from_directory('./train/',
                                                   target_size = (224, 224),
-                                                  batch_size = 12,
+                                                  batch_size = 32,
                                                   class_mode = 'categorical')
     test_set = test_datagen.flow_from_directory('./test/',
                                                 target_size = (224, 224),
-                                                batch_size = 12,
+                                                batch_size = 32,
                                                 class_mode = 'categorical')
     
+    print(training_set.class_indices)
+
     # fit the model
     r = model.fit(
     training_set,
     validation_data=test_set,
-    epochs=4,
-    steps_per_epoch= 8,
+    epochs=10,
+    steps_per_epoch= 32,
     validation_steps= 6)
     
     plt.style.use('ggplot')

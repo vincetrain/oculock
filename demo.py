@@ -36,8 +36,6 @@ def eye_extract(cam, frame):
     
     return cropped_eye
 
-
-
 def trainModel():
     name = str(input("Enter name for model: "))
     cv2.namedWindow("Cropped Eye")
