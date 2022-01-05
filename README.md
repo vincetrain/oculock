@@ -6,7 +6,7 @@ Yet to implement transfer-learning process: to be worked on later.
 ### dependencies
 
 > opencv-python  
-> keras
+> keras  
 > tensorflow  
 > numpy  
 > pillow  
