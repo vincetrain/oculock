@@ -1,0 +1,41 @@
+<!HTML5>
+
+<html>
+    <head>
+        <title>oculock</title>
+        <link rel="stylesheet" href="{{ url_for('static', filename='stylesheets/style.css') }}">
+    </head>
+
+    <body class = "bg">
+        <div class = "boxLayer1" id ="camera_read">
+            <img src="{{ url_for('video') }}"/>
+        </div>
+        <div class = "boxLayer1" id ="object_list">
+        </div>  
+
+        <div class = "boxLayer2" id="status">
+            <h2 id = "status_header"> {{status}} </h2>
+        </div>
+        <div class = "boxLayer2" id = "login">
+            <header> 
+                <h2>LOGIN</h2> 
+            </header>
+        </div>
+        <div id="myModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <form id = "form">
+                    <label for="uname">Username:</label><br>
+                    <input type="text" id="uname" name="uname" value=""><br><br>
+                    <label for="pass">Password:</label><br>
+                    <input type="password" id="pass" name="pass" value=""><br><br>
+                    <button type="button" id = "submit">Submit</button>
+                </form> 
+            </div>
+        </div>
+
+        <script type="text/javascript" src="{{ url_for('static', filename='script.js') }}"></script> 
+        <script type="text/javascript" src="{{ url_for('static', filename='script2.js') }}"></script>
+    </body>
+
+</html>
